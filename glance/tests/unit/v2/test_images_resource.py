@@ -264,6 +264,12 @@ class TestImagesController(base.IsolatedUnitTest):
         expected = set([UUID1])
         self.assertEqual(expected, actual)
 
+    def test_index_with_invalid_hidden_filter(self):
+        request = unit_test_utils.get_fake_request('/images?os_hidden=abcd')
+        self.assertRaises(webob.exc.HTTPBadRequest,
+                          self.controller.index, request,
+                          filters={'os_hidden': 'abcd'})
+
     def test_index_with_checksum_filter_single_image(self):
         req = unit_test_utils.get_fake_request('/images?checksum=%s' % CHKSUM)
         output = self.controller.index(req, filters={'checksum': CHKSUM})
@@ -873,6 +879,12 @@ class TestImagesController(base.IsolatedUnitTest):
         output_logs = self.notifier.get_logs()
         # NOTE(markwash): don't send a notification if nothing is updated
         self.assertEqual(0, len(output_logs))
+
+    def test_update_queued_image_with_hidden(self):
+        request = unit_test_utils.get_fake_request()
+        changes = [{'op': 'replace', 'path': ['os_hidden'], 'value': 'true'}]
+        self.assertRaises(webob.exc.HTTPForbidden, self.controller.update,
+                          request, UUID3, changes=changes)
 
     def test_update_with_bad_min_disk(self):
         request = unit_test_utils.get_fake_request()
@@ -3441,6 +3453,7 @@ class TestImagesSerializer(test_utils.BaseTestCase):
                     'status': 'queued',
                     'visibility': 'public',
                     'protected': False,
+                    'os_hidden': False,
                     'tags': set(['one', 'two']),
                     'size': 1024,
                     'virtual_size': 3072,
@@ -3461,6 +3474,7 @@ class TestImagesSerializer(test_utils.BaseTestCase):
                     'status': 'queued',
                     'visibility': 'private',
                     'protected': False,
+                    'os_hidden': False,
                     'tags': set([]),
                     'created_at': ISOTIME,
                     'updated_at': ISOTIME,
@@ -3547,6 +3561,7 @@ class TestImagesSerializer(test_utils.BaseTestCase):
             'status': 'queued',
             'visibility': 'public',
             'protected': False,
+            'os_hidden': False,
             'tags': set(['one', 'two']),
             'size': 1024,
             'virtual_size': 3072,
@@ -3575,6 +3590,7 @@ class TestImagesSerializer(test_utils.BaseTestCase):
             'status': 'queued',
             'visibility': 'private',
             'protected': False,
+            'os_hidden': False,
             'tags': [],
             'created_at': ISOTIME,
             'updated_at': ISOTIME,
@@ -3602,6 +3618,7 @@ class TestImagesSerializer(test_utils.BaseTestCase):
             'status': 'queued',
             'visibility': 'public',
             'protected': False,
+            'os_hidden': False,
             'tags': ['one', 'two'],
             'size': 1024,
             'virtual_size': 3072,
@@ -3678,6 +3695,7 @@ class TestImagesSerializer(test_utils.BaseTestCase):
             'status': 'queued',
             'visibility': 'public',
             'protected': False,
+            'os_hidden': False,
             'tags': set(['one', 'two']),
             'size': 1024,
             'virtual_size': 3072,
@@ -3742,6 +3760,7 @@ class TestImagesSerializerWithUnicode(test_utils.BaseTestCase):
                     u'status': u'queued',
                     u'visibility': u'public',
                     u'protected': False,
+                    u'os_hidden': False,
                     u'tags': [u'\u2160', u'\u2161'],
                     u'size': 1024,
                     u'virtual_size': 3072,
@@ -3779,6 +3798,7 @@ class TestImagesSerializerWithUnicode(test_utils.BaseTestCase):
             u'status': u'queued',
             u'visibility': u'public',
             u'protected': False,
+            u'os_hidden': False,
             u'tags': set([u'\u2160', u'\u2161']),
             u'size': 1024,
             u'virtual_size': 3072,
@@ -3810,6 +3830,7 @@ class TestImagesSerializerWithUnicode(test_utils.BaseTestCase):
             u'status': u'queued',
             u'visibility': u'public',
             u'protected': False,
+            u'os_hidden': False,
             u'tags': [u'\u2160', u'\u2161'],
             u'size': 1024,
             u'virtual_size': 3072,
@@ -3843,6 +3864,7 @@ class TestImagesSerializerWithUnicode(test_utils.BaseTestCase):
             u'status': u'queued',
             u'visibility': u'public',
             u'protected': False,
+            u'os_hidden': False,
             u'tags': set([u'\u2160', u'\u2161']),
             u'size': 1024,
             u'virtual_size': 3072,
@@ -3896,6 +3918,7 @@ class TestImagesSerializerWithExtendedSchema(test_utils.BaseTestCase):
             'status': 'queued',
             'visibility': 'private',
             'protected': False,
+            'os_hidden': False,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
             'tags': [],
             'size': 1024,
@@ -3924,6 +3947,7 @@ class TestImagesSerializerWithExtendedSchema(test_utils.BaseTestCase):
             'status': 'queued',
             'visibility': 'private',
             'protected': False,
+            'os_hidden': False,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
             'tags': [],
             'size': 1024,
@@ -3964,6 +3988,7 @@ class TestImagesSerializerWithAdditionalProperties(test_utils.BaseTestCase):
             'status': 'queued',
             'visibility': 'private',
             'protected': False,
+            'os_hidden': False,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
             'marx': 'groucho',
             'tags': [],
@@ -3998,6 +4023,7 @@ class TestImagesSerializerWithAdditionalProperties(test_utils.BaseTestCase):
             'status': 'queued',
             'visibility': 'private',
             'protected': False,
+            'os_hidden': False,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
             'marx': 123,
             'tags': [],
@@ -4027,6 +4053,7 @@ class TestImagesSerializerWithAdditionalProperties(test_utils.BaseTestCase):
             'status': 'queued',
             'visibility': 'private',
             'protected': False,
+            'os_hidden': False,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
             'tags': [],
             'size': 1024,
