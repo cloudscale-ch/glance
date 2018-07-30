@@ -15,6 +15,7 @@
 
 import datetime
 import eventlet
+import hashlib
 import uuid
 
 import glance_store as store
@@ -56,6 +57,10 @@ TENANT4 = 'c6c87f25-8a94-47ed-8c83-053c25f42df4'
 CHKSUM = '93264c3edf5972c9f1cb309543d38a5c'
 CHKSUM1 = '43254c3edf6972c9f1cb309543d38a8c'
 
+FAKEHASHALGO = 'fake-name-for-sha512'
+MULTIHASH1 = hashlib.sha512(b'glance').hexdigest()
+MULTIHASH2 = hashlib.sha512(b'image_service').hexdigest()
+
 
 def _db_fixture(id, **kwargs):
     obj = {
@@ -64,6 +69,8 @@ def _db_fixture(id, **kwargs):
         'visibility': 'shared',
         'properties': {},
         'checksum': None,
+        'os_hash_algo': FAKEHASHALGO,
+        'os_hash_value': None,
         'owner': None,
         'status': 'queued',
         'tags': [],
@@ -87,6 +94,8 @@ def _domain_fixture(id, **kwargs):
         'name': None,
         'visibility': 'private',
         'checksum': None,
+        'os_hash_algo': None,
+        'os_hash_value': None,
         'owner': None,
         'status': 'queued',
         'size': None,
@@ -149,6 +158,7 @@ class TestImagesController(base.IsolatedUnitTest):
     def _create_images(self):
         self.images = [
             _db_fixture(UUID1, owner=TENANT1, checksum=CHKSUM,
+                        os_hash_algo=FAKEHASHALGO, os_hash_value=MULTIHASH1,
                         name='1', size=256, virtual_size=1024,
                         visibility='public',
                         locations=[{'url': '%s/%s' % (BASE_URI, UUID1),
@@ -157,6 +167,7 @@ class TestImagesController(base.IsolatedUnitTest):
                         container_format='bare',
                         status='active'),
             _db_fixture(UUID2, owner=TENANT1, checksum=CHKSUM1,
+                        os_hash_algo=FAKEHASHALGO, os_hash_value=MULTIHASH2,
                         name='2', size=512, virtual_size=2048,
                         visibility='public',
                         disk_format='raw',
@@ -166,6 +177,7 @@ class TestImagesController(base.IsolatedUnitTest):
                         properties={'hypervisor_type': 'kvm', 'foo': 'bar',
                                     'bar': 'foo'}),
             _db_fixture(UUID3, owner=TENANT3, checksum=CHKSUM1,
+                        os_hash_algo=FAKEHASHALGO, os_hash_value=MULTIHASH2,
                         name='3', size=512, virtual_size=2048,
                         visibility='public', tags=['windows', '64bit', 'x86']),
             _db_fixture(UUID4, owner=TENANT4, name='4',
@@ -289,6 +301,34 @@ class TestImagesController(base.IsolatedUnitTest):
     def test_index_with_non_existent_checksum(self):
         req = unit_test_utils.get_fake_request('/images?checksum=236231827')
         output = self.controller.index(req, filters={'checksum': '236231827'})
+        self.assertEqual(0, len(output['images']))
+
+    def test_index_with_os_hash_value_filter_single_image(self):
+        req = unit_test_utils.get_fake_request(
+            '/images?os_hash_value=%s' % MULTIHASH1)
+        output = self.controller.index(req,
+                                       filters={'os_hash_value': MULTIHASH1})
+        self.assertEqual(1, len(output['images']))
+        actual = list([image.image_id for image in output['images']])
+        expected = [UUID1]
+        self.assertEqual(expected, actual)
+
+    def test_index_with_os_hash_value_filter_multiple_images(self):
+        req = unit_test_utils.get_fake_request(
+            '/images?os_hash_value=%s' % MULTIHASH2)
+        output = self.controller.index(req,
+                                       filters={'os_hash_value': MULTIHASH2})
+        self.assertEqual(2, len(output['images']))
+        actual = list([image.image_id for image in output['images']])
+        expected = [UUID3, UUID2]
+        self.assertEqual(expected, actual)
+
+    def test_index_with_non_existent_os_hash_value(self):
+        fake_hash_value = hashlib.sha512(b'not_used_in_fixtures').hexdigest()
+        req = unit_test_utils.get_fake_request(
+            '/images?os_hash_value=%s' % fake_hash_value)
+        output = self.controller.index(req,
+                                       filters={'checksum': fake_hash_value})
         self.assertEqual(0, len(output['images']))
 
     def test_index_size_max_filter(self):
@@ -2767,6 +2807,8 @@ class TestImagesDeserializer(test_utils.BaseTestCase):
             'id': '00000000-0000-0000-0000-000000000000',
             'status': 'active',
             'checksum': 'abcdefghijklmnopqrstuvwxyz012345',
+            'os_hash_algo': 'supersecure',
+            'os_hash_value': 'a' * 32 + 'b' * 32 + 'c' * 32 + 'd' * 32,
             'size': 9001,
             'virtual_size': 9001,
             'created_at': ISOTIME,
@@ -3437,7 +3479,9 @@ class TestImagesSerializer(test_utils.BaseTestCase):
                             visibility='public', container_format='ami',
                             tags=['one', 'two'], disk_format='ami',
                             min_ram=128, min_disk=10,
-                            checksum='ca425b88f047ce8ec45ee90e813ada91'),
+                            checksum='ca425b88f047ce8ec45ee90e813ada91',
+                            os_hash_algo=FAKEHASHALGO,
+                            os_hash_value=MULTIHASH1),
 
             # NOTE(bcwaldon): This second fixture depends on default behavior
             # and sets most values to None
@@ -3458,6 +3502,8 @@ class TestImagesSerializer(test_utils.BaseTestCase):
                     'size': 1024,
                     'virtual_size': 3072,
                     'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
+                    'os_hash_algo': FAKEHASHALGO,
+                    'os_hash_value': MULTIHASH1,
                     'container_format': 'ami',
                     'disk_format': 'ami',
                     'min_ram': 128,
@@ -3487,6 +3533,8 @@ class TestImagesSerializer(test_utils.BaseTestCase):
                     'min_ram': None,
                     'min_disk': None,
                     'checksum': None,
+                    'os_hash_algo': None,
+                    'os_hash_value': None,
                     'disk_format': None,
                     'virtual_size': None,
                     'container_format': None,
@@ -3566,6 +3614,8 @@ class TestImagesSerializer(test_utils.BaseTestCase):
             'size': 1024,
             'virtual_size': 3072,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
+            'os_hash_algo': FAKEHASHALGO,
+            'os_hash_value': MULTIHASH1,
             'container_format': 'ami',
             'disk_format': 'ami',
             'min_ram': 128,
@@ -3603,6 +3653,8 @@ class TestImagesSerializer(test_utils.BaseTestCase):
             'min_ram': None,
             'min_disk': None,
             'checksum': None,
+            'os_hash_algo': None,
+            'os_hash_value': None,
             'disk_format': None,
             'virtual_size': None,
             'container_format': None,
@@ -3623,6 +3675,8 @@ class TestImagesSerializer(test_utils.BaseTestCase):
             'size': 1024,
             'virtual_size': 3072,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
+            'os_hash_algo': FAKEHASHALGO,
+            'os_hash_value': MULTIHASH1,
             'container_format': 'ami',
             'disk_format': 'ami',
             'min_ram': 128,
@@ -3700,6 +3754,8 @@ class TestImagesSerializer(test_utils.BaseTestCase):
             'size': 1024,
             'virtual_size': 3072,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
+            'os_hash_algo': FAKEHASHALGO,
+            'os_hash_value': MULTIHASH1,
             'container_format': 'ami',
             'disk_format': 'ami',
             'min_ram': 128,
@@ -3746,6 +3802,8 @@ class TestImagesSerializerWithUnicode(test_utils.BaseTestCase):
                 'min_ram': 128,
                 'min_disk': 10,
                 'checksum': u'ca425b88f047ce8ec45ee90e813ada91',
+                'os_hash_algo': FAKEHASHALGO,
+                'os_hash_value': MULTIHASH1,
                 'extra_properties': {'lang': u'Fran\u00E7ais',
                                      u'dispos\u00E9': u'f\u00E2ch\u00E9'},
             }),
@@ -3765,6 +3823,8 @@ class TestImagesSerializerWithUnicode(test_utils.BaseTestCase):
                     u'size': 1024,
                     u'virtual_size': 3072,
                     u'checksum': u'ca425b88f047ce8ec45ee90e813ada91',
+                    u'os_hash_algo': six.text_type(FAKEHASHALGO),
+                    u'os_hash_value': six.text_type(MULTIHASH1),
                     u'container_format': u'ami',
                     u'disk_format': u'ami',
                     u'min_ram': 128,
@@ -3803,6 +3863,8 @@ class TestImagesSerializerWithUnicode(test_utils.BaseTestCase):
             u'size': 1024,
             u'virtual_size': 3072,
             u'checksum': u'ca425b88f047ce8ec45ee90e813ada91',
+            u'os_hash_algo': six.text_type(FAKEHASHALGO),
+            u'os_hash_value': six.text_type(MULTIHASH1),
             u'container_format': u'ami',
             u'disk_format': u'ami',
             u'min_ram': 128,
@@ -3835,6 +3897,8 @@ class TestImagesSerializerWithUnicode(test_utils.BaseTestCase):
             u'size': 1024,
             u'virtual_size': 3072,
             u'checksum': u'ca425b88f047ce8ec45ee90e813ada91',
+            u'os_hash_algo': six.text_type(FAKEHASHALGO),
+            u'os_hash_value': six.text_type(MULTIHASH1),
             u'container_format': u'ami',
             u'disk_format': u'ami',
             u'min_ram': 128,
@@ -3869,6 +3933,8 @@ class TestImagesSerializerWithUnicode(test_utils.BaseTestCase):
             u'size': 1024,
             u'virtual_size': 3072,
             u'checksum': u'ca425b88f047ce8ec45ee90e813ada91',
+            u'os_hash_algo': six.text_type(FAKEHASHALGO),
+            u'os_hash_value': six.text_type(MULTIHASH1),
             u'container_format': u'ami',
             u'disk_format': u'ami',
             u'min_ram': 128,
@@ -3908,6 +3974,7 @@ class TestImagesSerializerWithExtendedSchema(test_utils.BaseTestCase):
         self.fixture = _domain_fixture(
             UUID2, name='image-2', owner=TENANT2,
             checksum='ca425b88f047ce8ec45ee90e813ada91',
+            os_hash_algo=FAKEHASHALGO, os_hash_value=MULTIHASH1,
             created_at=DATETIME, updated_at=DATETIME, size=1024,
             virtual_size=3072, extra_properties=props)
 
@@ -3920,6 +3987,8 @@ class TestImagesSerializerWithExtendedSchema(test_utils.BaseTestCase):
             'protected': False,
             'os_hidden': False,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
+            'os_hash_algo': FAKEHASHALGO,
+            'os_hash_value': MULTIHASH1,
             'tags': [],
             'size': 1024,
             'virtual_size': 3072,
@@ -3949,6 +4018,8 @@ class TestImagesSerializerWithExtendedSchema(test_utils.BaseTestCase):
             'protected': False,
             'os_hidden': False,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
+            'os_hash_algo': FAKEHASHALGO,
+            'os_hash_value': MULTIHASH1,
             'tags': [],
             'size': 1024,
             'virtual_size': 3072,
@@ -3977,6 +4048,7 @@ class TestImagesSerializerWithAdditionalProperties(test_utils.BaseTestCase):
         self.fixture = _domain_fixture(
             UUID2, name='image-2', owner=TENANT2,
             checksum='ca425b88f047ce8ec45ee90e813ada91',
+            os_hash_algo=FAKEHASHALGO, os_hash_value=MULTIHASH1,
             created_at=DATETIME, updated_at=DATETIME, size=1024,
             virtual_size=3072, extra_properties={'marx': 'groucho'})
 
@@ -3990,6 +4062,8 @@ class TestImagesSerializerWithAdditionalProperties(test_utils.BaseTestCase):
             'protected': False,
             'os_hidden': False,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
+            'os_hash_algo': FAKEHASHALGO,
+            'os_hash_value': MULTIHASH1,
             'marx': 'groucho',
             'tags': [],
             'size': 1024,
@@ -4025,6 +4099,8 @@ class TestImagesSerializerWithAdditionalProperties(test_utils.BaseTestCase):
             'protected': False,
             'os_hidden': False,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
+            'os_hash_algo': FAKEHASHALGO,
+            'os_hash_value': MULTIHASH1,
             'marx': 123,
             'tags': [],
             'size': 1024,
@@ -4055,6 +4131,8 @@ class TestImagesSerializerWithAdditionalProperties(test_utils.BaseTestCase):
             'protected': False,
             'os_hidden': False,
             'checksum': 'ca425b88f047ce8ec45ee90e813ada91',
+            'os_hash_algo': FAKEHASHALGO,
+            'os_hash_value': MULTIHASH1,
             'tags': [],
             'size': 1024,
             'virtual_size': 3072,
