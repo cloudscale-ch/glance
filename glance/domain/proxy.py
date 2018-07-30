@@ -174,6 +174,8 @@ class Image(object):
     protected = _proxy('base', 'protected')
     locations = _proxy('base', 'locations')
     checksum = _proxy('base', 'checksum')
+    os_hash_algo = _proxy('base', 'os_hash_algo')
+    os_hash_value = _proxy('base', 'os_hash_value')
     owner = _proxy('base', 'owner')
     disk_format = _proxy('base', 'disk_format')
     container_format = _proxy('base', 'container_format')
