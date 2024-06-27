@@ -145,6 +145,12 @@ class TestFormatInspectors(test_utils.BaseTestCase):
         # a local file.
         self.assertLess(fmt.actual_size, file_size)
 
+    def test_qed_always_unsafe(self):
+        img = self._create_img('qed', 10 * units.Mi)
+        fmt = format_inspector.get_inspector('qed').from_file(img)
+        self.assertTrue(fmt.format_match)
+        self.assertFalse(fmt.safety_check())
+
     def test_qcow2_safety_checks(self):
         # Create backing and data-file names (and initialize the backing file)
         backing_fn = tempfile.mktemp(prefix='backing')
