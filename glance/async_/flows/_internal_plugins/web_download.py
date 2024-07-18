@@ -20,7 +20,6 @@ from oslo_utils import encodeutils
 from oslo_utils import excutils
 from taskflow.patterns import linear_flow as lf
 from taskflow import task
-from taskflow.types import failure
 
 from glance.common import exception
 from glance.common.scripts import utils as script_utils
@@ -134,20 +133,19 @@ class _WebDownload(task.Task):
         return self._path
 
     def revert(self, result, **kwargs):
-        if isinstance(result, failure.Failure):
-            LOG.error(_LE('Task: %(task_id)s failed to import image '
-                          '%(image_id)s to the filesystem.'),
-                      {'task_id': self.task_id,
-                       'image_id': self.image_id})
-            # NOTE(abhishekk): Revert image state back to 'queued' as
-            # something went wrong.
-            # NOTE(danms): If we failed to stage the image, then none
-            # of the _ImportToStore() tasks could have run, so we need
-            # to move all stores out of "importing" and into "failed".
-            with self.action_wrapper as action:
-                action.set_image_attribute(status='queued')
-                action.remove_importing_stores(self.stores)
-                action.add_failed_stores(self.stores)
+        LOG.error(_LE('Task: %(task_id)s failed to import image '
+                      '%(image_id)s to the filesystem.'),
+                  {'task_id': self.task_id,
+                   'image_id': self.image_id})
+        # NOTE(abhishekk): Revert image state back to 'queued' as
+        # something went wrong.
+        # NOTE(danms): If we failed to stage the image, then none
+        # of the _ImportToStore() tasks could have run, so we need
+        # to move all stores out of "importing" and into "failed".
+        with self.action_wrapper as action:
+            action.set_image_attribute(status='queued')
+            action.remove_importing_stores(self.stores)
+            action.add_failed_stores(self.stores)
 
         # NOTE(abhishekk): Deleting partial image data from staging area
         if self._path is not None:
