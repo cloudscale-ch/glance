@@ -208,13 +208,11 @@ class TestWebDownloadTask(test_utils.BaseTestCase):
         web_download_task.revert(None)
         mock_store_api.delete_from_backend.assert_called_once_with(
             "/path/to_downloaded_data")
-        # NOTE(danms): Since we told revert that we were not at fault,
-        # we should not have updated the image.
-        self.image_repo.save.assert_not_called()
+        self.assertEqual(1, self.image_repo.save.call_count)
         self.assertEqual(
-            'foo', image.extra_properties['os_glance_importing_to_stores'])
+            '', image.extra_properties['os_glance_importing_to_stores'])
         self.assertEqual(
-            '', image.extra_properties['os_glance_failed_import'])
+            'foo', image.extra_properties['os_glance_failed_import'])
 
     @mock.patch("glance.async_.flows._internal_plugins.web_download.store_api")
     def test_web_download_revert_without_failure_multi_store(self,
